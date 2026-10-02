@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BinoPick - binocular light check</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background:#14201f; color:#eaf5f3; line-height:1.5; }
+  .wrap { max-width:700px; margin:0 auto; padding:26px 16px 50px; }
+  h1 { font-size:28px; } h1 span { color:#6fd0c0; }
+  .sub { color:#9fbdb8; margin:6px 0 16px; }
+  .card { background:#1f3130; border-radius:14px; padding:14px; margin-bottom:12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; }
+  label { font-size:12px; color:#9fbdb8; display:block; margin-bottom:3px; }
+  input,select { width:100%; background:#14201f; color:#eaf5f3; border:1px solid #3f6360; border-radius:8px; padding:8px; font-size:15px; font-family:inherit; }
+  button { background:#2f4a48; color:#eaf5f3; border:0; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:14px; margin-right:6px; margin-top:10px; }
+  table { width:100%; border-collapse:collapse; } td,th { text-align:left; padding:8px 4px; border-bottom:1px solid #2c4442; } th { font-size:12px; color:#9fbdb8; font-weight:600; }
+  td.v { font-size:22px; font-weight:800; color:#6fd0c0; } tr.me td.v { color:#eaf5f3; }
+  .stats { display:flex; gap:22px; flex-wrap:wrap; margin-top:12px; } .stats b { display:block; font-size:20px; } .muted { color:#9fbdb8; font-size:13px; }
+  .err { color:#ff9c8a; } .note { font-size:12.5px; color:#7e9b96; margin-top:6px; }
+
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; } .pill { display:inline-block; padding:2px 9px; border-radius:99px; font-size:12px; font-weight:700; } .ok { background:#1f5b4f; } .warn { background:#6b4b1a; } .bad { background:#6b2a2a; }
+  td.v { font-size:18px; } @media (max-width:520px){ .two{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Bino<span>Pick</span></h1>
+  <div class="sub">Will these binoculars actually look bright to your eyes, in this light? Compare two pairs.</div>
+  <div class="card">
+    <div class="two">
+      <div><label>Binocular A: magnification</label><input id="ma" value="7"><label style="margin-top:6px">Objective lens (mm)</label><input id="oa" value="50"></div>
+      <div><label>Binocular B: magnification</label><input id="mb" value="10"><label style="margin-top:6px">Objective lens (mm)</label><input id="ob" value="42"></div>
+    </div>
+    <div class="grid" style="margin-top:10px"><div><label>Your age</label><input id="age" value="35"></div><div><label>Light</label><select id="cond"><option value="day">Bright daylight</option><option value="overcast">Overcast or shade</option><option value="dusk" selected>Dawn or dusk</option><option value="dark">Deep woods or night</option></select></div></div>
+    <button id="p1">7x50 vs 7x28, daylight</button><button id="p2">8x32 vs 20x80</button><button id="p3">10x40 vs 7x42, age 60</button>
+  </div>
+  <div class="card" id="out"></div>
+  <div class="note">Sources: Astronomics, "Some Binocular Specifications". Exit pupil = objective / magnification. Relative brightness = exit pupil squared. Twilight factor = square root of (magnification x objective). Your eye opens to about 7 mm when young, 5.5 mm near 40 and 5 mm near 50 (interpolated between those points, then 0.25 mm less per decade). Pupil sizes in each light level are rules of thumb: about 3 mm bright, 3.5 mm overcast, 5 mm dusk, up to 7 mm dark. Glass quality, coatings and field of view are not modelled. Runs in your browser, nothing stored.</div>
+</div>
+<script src="engine.js"></script>
+<script>
+(function () {
+  var B = window.BinoPick, $ = function (i) { return document.getElementById(i); };
+  function f(x, d) { return x.toFixed(d); }
+  function card(name, a) {
+    var tag = a.verdict === 'match' ? '<span class="pill ok">matches your eye</span>' : a.verdict === 'over' ? '<span class="pill warn">' + Math.round(a.wasted * 100) + '% of the light is wasted</span>' : '<span class="pill bad">dimmer than your eye could use</span>';
+    return '<td><b>' + name + ' ' + a.mag + 'x' + a.obj + '</b><br>' + tag + '</td>';
+  }
+  function render() {
+    var age = parseFloat($('age').value), c = $('cond').value;
+    var a = B.analyze(parseFloat($('ma').value), parseFloat($('oa').value), c, age), b = B.analyze(parseFloat($('mb').value), parseFloat($('ob').value), c, age);
+    if (!a || !b) { $('out').innerHTML = '<div class="err">Enter magnification 1 to 100, objective 10 to 200 mm and an age from 5 to 100.</div>'; return; }
+    function row(n, x, y, hi) { return '<tr><td>' + n + '</td><td class="v">' + x + '</td><td class="v">' + y + '</td></tr>'; }
+    var tw = a.twilight === b.twilight ? 'equal' : (a.twilight > b.twilight ? 'A' : 'B'), ef = Math.abs(a.effective - b.effective) < 0.05 ? 'equal' : (a.effective > b.effective ? 'A' : 'B');
+    var sum = ef === 'equal' ? 'In this light and at your age, both give your eye the same brightness.' : 'In this light, ' + ef + ' looks brighter to your eye (' + f(Math.max(a.effective, b.effective), 1) + ' vs ' + f(Math.min(a.effective, b.effective), 1) + ').';
+    $('out').innerHTML = '<table><tr><th>Your eye here: ' + f(a.eyePupil, 1) + ' mm pupil</th><th>A</th><th>B</th></tr>' +
+      row('Exit pupil (mm)', f(a.exit, 1), f(b.exit, 1)) + row('Relative brightness', f(a.rel, 1), f(b.rel, 1)) + row('Twilight factor', f(a.twilight, 1), f(b.twilight, 1)) + row('Brightness your eye gets', f(a.effective, 1), f(b.effective, 1)) +
+      '</table><table style="margin-top:8px"><tr>' + card('A', a) + card('B', b) + '</tr></table>' +
+      '<div class="stats"><div><span class="muted">Brighter to your eye</span><b>' + (ef === 'equal' ? 'Equal' : ef) + '</b></div><div><span class="muted">Better detail in dim light (twilight factor)</span><b>' + (tw === 'equal' ? 'Equal' : tw) + '</b></div><div><span class="muted">Light-gathering area</span><b>' + f(Math.max(a.area, b.area) / Math.min(a.area, b.area), 2) + 'x</b></div></div><div class="note">' + sum + '</div>';
+  }
+  function set(m1, o1, m2, o2, ag, cd) { $('ma').value = m1; $('oa').value = o1; $('mb').value = m2; $('ob').value = o2; if (ag) $('age').value = ag; if (cd) $('cond').value = cd; render(); }
+  ['ma', 'oa', 'mb', 'ob', 'age'].forEach(function (i) { $(i).oninput = render; }); $('cond').onchange = render;
+  $('p1').onclick = function () { set(7, 50, 7, 28, 30, 'day'); }; $('p2').onclick = function () { set(8, 32, 20, 80, 30, 'dusk'); }; $('p3').onclick = function () { set(10, 40, 7, 42, 60, 'dusk'); };
+  render();
+})();
+</script>
+</body>
+</html>
